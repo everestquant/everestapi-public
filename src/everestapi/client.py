@@ -26,9 +26,71 @@ Usage::
 from __future__ import annotations
 
 import os
+from pathlib import PurePath
 from typing import Any
 
 import httpx
+
+
+def _safe_output_path(output_path: str, *, server_supplied: bool = False) -> str:
+    """Validate a download destination path.
+
+    Rejects any path that would escape the intended directory via ``..``
+    segments (after normalisation). When ``server_supplied`` is True the
+    caller is treating ``output_path`` as a filename returned by the server
+    and we additionally strip directory components defensively via
+    :func:`os.path.basename`.
+    """
+    if server_supplied:
+        # Server-supplied filename: only keep the basename, never honour any
+        # directory components the server tries to inject.
+        output_path = os.path.basename(output_path)
+        if not output_path or output_path in (".", ".."):
+            raise ValueError(
+                f"Refusing to write to invalid server-supplied filename: {output_path!r}",
+            )
+        return output_path
+
+    # User-supplied path. Absolute paths are fine; reject any '..' segments
+    # that survive normalisation (these would let a path traversal escape
+    # the user's intended directory).
+    parts = PurePath(output_path).parts
+    if any(part == ".." for part in parts):
+        raise ValueError(
+            f"Refusing to write to path containing '..' segments: {output_path!r}",
+        )
+    return output_path
+
+
+def _open_no_symlink(path: str):
+    """Open ``path`` for binary write, refusing to follow a pre-existing symlink.
+
+    Cross-platform shim:
+      * On POSIX, uses ``os.open`` with ``O_NOFOLLOW`` so opening a symlink
+        fails atomically.
+      * On Windows (no ``O_NOFOLLOW``), uses ``os.lstat`` to detect a symlink
+        before opening. There is a small TOCTOU window on Windows but it
+        materially raises the bar over a plain ``open``.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | nofollow
+        fd = os.open(path, flags, 0o644)
+        return os.fdopen(fd, "wb")
+
+    # Windows path: pre-flight lstat check. If the target exists and is a
+    # symlink, refuse to open it.
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        st = None
+    if st is not None:
+        import stat as _stat
+        if _stat.S_ISLNK(st.st_mode):
+            raise OSError(
+                f"Refusing to write to symlink at {path!r} (symlink-following blocked)",
+            )
+    return open(path, "wb")
 
 
 class EverestError(Exception):
@@ -113,9 +175,10 @@ class EverestAPI:
             except Exception:
                 detail = resp.text
             raise EverestError(resp.status_code, detail)
-        with open(output_path, "wb") as f:
+        safe_path = _safe_output_path(output_path)
+        with _open_no_symlink(safe_path) as f:
             f.write(resp.content)
-        return output_path
+        return safe_path
 
     # -- public API -------------------------------------------------------
 
@@ -238,7 +301,10 @@ class EverestAPI:
             until the compute output-file infrastructure is deployed.
         """
         if output_path is None:
-            output_path = filename
+            # ``filename`` flows through to the URL but is also the default
+            # destination on disk; sanitise as server-supplied so a value
+            # like "../etc/passwd" can't escape cwd.
+            output_path = _safe_output_path(filename, server_supplied=True)
         return self._download(
             f"/api/v1/compute/jobs/{job_id}/output/{filename}", output_path,
         )
@@ -448,11 +514,16 @@ class EverestAPI:
         url = info["download_url"]
         if output_path is None:
             output_path = f"{job_id}.pkl"
-        resp = httpx.get(url, follow_redirects=True)
+        safe_path = _safe_output_path(output_path)
+        # Presigned S3 URLs reject our X-API-Key header signing, so we
+        # don't reuse ``self._client``; instead use a fresh httpx.get with
+        # an explicit timeout matching the rest of the SDK so a hung S3
+        # endpoint can't block the caller indefinitely.
+        resp = httpx.get(url, follow_redirects=True, timeout=self._client.timeout)
         resp.raise_for_status()
-        with open(output_path, "wb") as f:
+        with _open_no_symlink(safe_path) as f:
             f.write(resp.content)
-        return output_path
+        return safe_path
 
     def cancel_job(self, job_id: str) -> dict:
         """Cancel a running compute job."""
