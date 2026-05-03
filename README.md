@@ -31,6 +31,8 @@ scores = api.get_scores(model_id="my-model", days=30)
 
 Or set `EVEREST_API_KEY` as an environment variable and omit the constructor argument.
 
+> **Handling your API key.** Shell history, terminal recordings, and CI logs may persist any value you `echo` or `print`. Copy the key via the clipboard rather than echoing it in a recorded session, and prefer storing it in a secrets manager or `.env` file (gitignored) over inlining in source.
+
 ## Two tournaments
 
 | Tournament | Universe | Features | Frequency |
@@ -73,6 +75,8 @@ job = api.custom_train(script_path="train.py", gpu="A100", max_hours=2.0)
 result = api.wait_for_job(job["job_id"])
 api.download_model(job["job_id"], output_path="model.pkl")
 ```
+
+> **Pickle safety.** Trained models are returned as pickle files. `pickle.load` is RCE-equivalent: only load `.pkl` files from compute jobs you initiated yourself. Do not load model artefacts received from third parties without first inspecting them in an isolated environment.
 
 ### Staking (USDC)
 
