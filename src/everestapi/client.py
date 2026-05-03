@@ -146,14 +146,27 @@ class EverestAPI:
                 basic_auth = (env_user, env_pass)
         self.basic_auth = basic_auth
 
+        headers: dict[str, str] = {}
+        if self.api_key:
+            # Only inject the X-API-Key header when we actually have one;
+            # an empty header value is meaningless and may show up in
+            # server logs.
+            headers["X-API-Key"] = self.api_key
+
         client_kwargs: dict[str, Any] = {
             "base_url": self.base_url,
-            "headers": {"X-API-Key": self.api_key},
+            "headers": headers,
             "timeout": timeout,
         }
         if self.basic_auth is not None:
             client_kwargs["auth"] = self.basic_auth
         self._client = httpx.Client(**client_kwargs)
+
+    def __repr__(self) -> str:
+        return (
+            f"<EverestAPI base_url={self.base_url!r} "
+            f"api_key=*** authenticated={bool(self.api_key)}>"
+        )
 
     # -- helpers ----------------------------------------------------------
 
