@@ -1,0 +1,9 @@
+name: Semgrep
+
+on:
+  pull_request:
+    branches: ['**']
+
+jobs:
+  semgrep:
+    uses: everestquant/.github/.github/workflows/semgrep.yml@main
