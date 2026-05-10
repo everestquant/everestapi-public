@@ -35,7 +35,7 @@ everestapi = "everestapi.cli:cli"
 [project.urls]
 Homepage = "https://everestquant.ai"
 Documentation = "https://docs.everestquant.ai"
-Repository = "https://github.com/mpprice/everestapi"
+Repository = "https://github.com/everestquant/everestapi"
 
 [tool.setuptools.packages.find]
 where = ["src"]
