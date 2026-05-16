@@ -1,0 +1,26 @@
+name: Claude Review - /ship attestation
+
+# Caller for the everestquant/.github reusable. Handles `/ship`
+# self-attestation on risk:mid PRs. See README in everestquant/.github
+# for the full validation chain.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  checks: read
+  contents: read
+  actions: read
+
+jobs:
+  attest:
+    if: |
+      github.event.issue.pull_request != null
+      && github.event.comment.user.type != 'Bot'
+      && contains(github.event.comment.body, '/ship')
+    uses: everestquant/.github/.github/workflows/claude-ship-attest.yml@main
+    secrets:
+      CLAUDE_REVIEW_APP_ID: ${{ secrets.CLAUDE_REVIEW_APP_ID }}
+      CLAUDE_REVIEW_APP_PRIVATE_KEY: ${{ secrets.CLAUDE_REVIEW_APP_PRIVATE_KEY }}

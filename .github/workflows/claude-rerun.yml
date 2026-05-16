@@ -1,0 +1,27 @@
+name: Claude Review - Comment Commands
+
+# Caller for the everestquant/.github reusable. Handles the two PR-comment
+# commands that re-trigger the Claude security review out-of-band:
+#   /claude-review:retry  — re-run the previous workflow run
+#   /claude-review:rerun  — push an empty commit to refresh the review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  actions: write
+  contents: write
+
+jobs:
+  dispatch:
+    if: |
+      github.event.issue.pull_request != null && (
+        contains(github.event.comment.body, '/claude-review:retry') ||
+        contains(github.event.comment.body, '/claude-review:rerun')
+      )
+    uses: everestquant/.github/.github/workflows/claude-rerun.yml@main
+    secrets:
+      CLAUDE_REVIEW_APP_ID: ${{ secrets.CLAUDE_REVIEW_APP_ID }}
+      CLAUDE_REVIEW_APP_PRIVATE_KEY: ${{ secrets.CLAUDE_REVIEW_APP_PRIVATE_KEY }}

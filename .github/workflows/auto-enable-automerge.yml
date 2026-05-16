@@ -1,0 +1,19 @@
+name: Auto-enable PR Auto-merge
+
+# Caller for the everestquant/.github reusable. Flips squash auto-merge on
+# for every PR opened by a trusted author so the PR lands the moment
+# required checks are green and an approving review is in. See the README
+# in everestquant/.github for the full flow and the current trusted-author
+# list (edits to the list happen there, not here).
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  enable:
+    uses: everestquant/.github/.github/workflows/auto-enable-automerge.yml@main
